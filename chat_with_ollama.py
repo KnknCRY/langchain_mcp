@@ -7,7 +7,7 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 async def main():
     # 初始化 Ollama 模型
     llm = ChatOllama(
-        model="qwen2.5:1.5b",
+        model="qwen2.5:latest",
         base_url="http://localhost:11434"
     )
 
@@ -41,12 +41,17 @@ async def main():
         HumanMessage(content="你好！請介紹一下你自己，並告訴我你可以使用哪些工具。")
     ]
 
-    response = await llm_with_tools.ainvoke(messages)
-    print(f"\n助手回應:\n{response.content}")
+    # 使用 stream 方式獲取回應
+    print("\n助手回應:")
+    async for chunk in llm_with_tools.astream(messages):
+        if chunk.content:
+            print(chunk.content, end="", flush=True)
 
-    # 如果有工具調用
-    if hasattr(response, 'tool_calls') and response.tool_calls:
-        print(f"\n工具調用: {response.tool_calls}")
+        # 檢查是否有工具調用
+        if hasattr(chunk, 'tool_calls') and chunk.tool_calls:
+            print(f"\n\n工具調用: {chunk.tool_calls}")
+
+    print()  # 換行
 
 
 # 執行方式：.venv/bin/python chat_with_ollama.py
