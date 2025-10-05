@@ -69,24 +69,35 @@ async def generate_stream(message: str, system_prompt: str):
         # 發送迭代信息
         yield f"data: {json.dumps({'type': 'iteration', 'iteration': iteration + 1}, ensure_ascii=False)}\n\n"
 
-        # 調用 LLM
-        response = await llm_with_tools.ainvoke(messages)
+        # 調用 LLM (使用串流)
+        response_content = ""
+        response_tool_calls = []
+
+        async for chunk in llm_with_tools.astream(messages):
+            # 串流內容
+            if chunk.content:
+                response_content += chunk.content
+                yield f"data: {json.dumps({'type': 'content', 'content': chunk.content}, ensure_ascii=False)}\n\n"
+
+            # 收集工具調用
+            if hasattr(chunk, 'tool_calls') and chunk.tool_calls:
+                response_tool_calls.extend(chunk.tool_calls)
+
+        # 構建完整的 response 物件加入訊息歷史
+        from langchain_core.messages import AIMessage
+        response = AIMessage(content=response_content, tool_calls=response_tool_calls)
         messages.append(response)
 
-        # 發送 LLM 回應
-        if response.content:
-            yield f"data: {json.dumps({'type': 'content', 'content': response.content}, ensure_ascii=False)}\n\n"
-
         # 檢查是否有工具調用
-        if not response.tool_calls:
+        if not response_tool_calls:
             yield f"data: {json.dumps({'type': 'done', 'message': '對話完成'}, ensure_ascii=False)}\n\n"
             break
 
         # 發送工具調用信息
-        yield f"data: {json.dumps({'type': 'tool_calls_detected', 'count': len(response.tool_calls)}, ensure_ascii=False)}\n\n"
+        yield f"data: {json.dumps({'type': 'tool_calls_detected', 'count': len(response_tool_calls)}, ensure_ascii=False)}\n\n"
 
         # 執行工具調用
-        for tool_call in response.tool_calls:
+        for tool_call in response_tool_calls:
             tool_name = tool_call['name']
             tool_args = tool_call['args']
 
