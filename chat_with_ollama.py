@@ -49,5 +49,6 @@ async def main():
         print(f"\n工具調用: {response.tool_calls}")
 
 
+# 執行方式：.venv/bin/python chat_with_ollama.py
 if __name__ == "__main__":
     asyncio.run(main())
