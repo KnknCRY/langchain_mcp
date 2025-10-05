@@ -11,6 +11,7 @@ app = FastAPI()
 # 全局變量存儲 LLM 和工具
 llm_with_tools = None # 真正要用的 LLM物件
 client = None
+tools_by_name = None  # 工具名稱到工具物件的映射
 
 
 class ChatRequest(BaseModel):
@@ -21,11 +22,11 @@ class ChatRequest(BaseModel):
 @app.on_event("startup")
 async def startup_event():
     """初始化 LLM 和 MCP 客戶端"""
-    global llm_with_tools, client
+    global llm_with_tools, client, tools_by_name
 
     # 初始化 Ollama 模型
     llm = ChatOllama(
-        model="qwen2.5:1.5b",
+        model="qwen2.5:latest",
         base_url="http://localhost:11434"
     )
 
@@ -47,37 +48,71 @@ async def startup_event():
     tools = await client.get_tools()
     print(f"已載入 {len(tools)} 個 MCP 工具")
 
+    # 建立工具名稱到工具物件的映射
+    tools_by_name = {tool.name: tool for tool in tools}
+
     # 將 MCP 工具綁定到 LLM
     llm_with_tools = llm.bind_tools(tools)
 
 
 async def generate_stream(message: str, system_prompt: str):
     """生成串流回應"""
+    from langchain_core.messages import ToolMessage
+
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=message)
     ]
 
-    async for chunk in llm_with_tools.astream(messages):
-        # 構建回應數據
-        response_data = {
-            "content": chunk.content if chunk.content else "",
-            "tool_calls": []
-        }
+    # 工具調用循環，最多執行 10 次以防無限循環
+    for iteration in range(10):
+        # 發送迭代信息
+        yield f"data: {json.dumps({'type': 'iteration', 'iteration': iteration + 1}, ensure_ascii=False)}\n\n"
+
+        # 調用 LLM
+        response = await llm_with_tools.ainvoke(messages)
+        messages.append(response)
+
+        # 發送 LLM 回應
+        if response.content:
+            yield f"data: {json.dumps({'type': 'content', 'content': response.content}, ensure_ascii=False)}\n\n"
 
         # 檢查是否有工具調用
-        if hasattr(chunk, 'tool_calls') and chunk.tool_calls:
-            response_data["tool_calls"] = [
-                {
-                    "name": tc.get("name"),
-                    "args": tc.get("args"),
-                    "id": tc.get("id")
-                }
-                for tc in chunk.tool_calls
-            ]
+        if not response.tool_calls:
+            yield f"data: {json.dumps({'type': 'done', 'message': '對話完成'}, ensure_ascii=False)}\n\n"
+            break
 
-        # 使用 SSE 格式發送數據
-        yield f"data: {json.dumps(response_data, ensure_ascii=False)}\n\n"
+        # 發送工具調用信息
+        yield f"data: {json.dumps({'type': 'tool_calls_detected', 'count': len(response.tool_calls)}, ensure_ascii=False)}\n\n"
+
+        # 執行工具調用
+        for tool_call in response.tool_calls:
+            tool_name = tool_call['name']
+            tool_args = tool_call['args']
+
+            # 發送工具調用開始
+            yield f"data: {json.dumps({'type': 'tool_call_start', 'name': tool_name, 'args': tool_args}, ensure_ascii=False)}\n\n"
+
+            # 找到對應的工具並執行
+            if tool_name in tools_by_name:
+                tool = tools_by_name[tool_name]
+                tool_result = await tool.ainvoke(tool_args)
+            else:
+                tool_result = f"錯誤: 找不到工具 '{tool_name}'"
+
+            # 發送工具執行結果
+            result_preview = str(tool_result)[:200] + ("..." if len(str(tool_result)) > 200 else "")
+            yield f"data: {json.dumps({'type': 'tool_result', 'name': tool_name, 'result': result_preview}, ensure_ascii=False)}\n\n"
+
+            # 將工具結果加入訊息歷史
+            messages.append(
+                ToolMessage(
+                    content=str(tool_result),
+                    tool_call_id=tool_call['id']
+                )
+            )
+    else:
+        yield f"data: {json.dumps({'type': 'max_iterations', 'message': '達到最大迭代次數'}, ensure_ascii=False)}\n\n"
 
     # 發送結束標記
     yield "data: [DONE]\n\n"
@@ -102,6 +137,10 @@ async def health():
     return {"status": "ok", "llm_ready": llm_with_tools is not None}
 
 # .venv/bin/python api_server.py
+# curl -X POST http://localhost:8080/chat/stream \
+    # -H "Content-Type: application/json" \
+    # -d '{"message": "撈出sales.customers資料表所有資料"}' \
+    # --no-buffer
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8080)
