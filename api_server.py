@@ -9,7 +9,7 @@ import json
 app = FastAPI()
 
 # 全局變量存儲 LLM 和工具
-llm_with_tools = None
+llm_with_tools = None # 真正要用的 LLM物件
 client = None
 
 
