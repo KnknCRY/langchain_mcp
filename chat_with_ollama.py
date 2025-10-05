@@ -38,18 +38,57 @@ async def main():
     print("\n開始對話...")
     messages = [
         SystemMessage(content="你是一個有用的助手，可以使用 PostgreSQL 數據庫工具來回答問題。"),
-        HumanMessage(content="你好！請介紹一下你自己，並告訴我你可以使用哪些工具。")
+        HumanMessage(content="撈出sales.customers資料表所有資料")
     ]
 
-    # 使用 stream 方式獲取回應
-    print("\n助手回應:")
-    async for chunk in llm_with_tools.astream(messages):
-        if chunk.content:
-            print(chunk.content, end="", flush=True)
+    # 建立工具名稱到工具物件的映射
+    tools_by_name = {tool.name: tool for tool in tools}
+
+    # 工具調用循環，最多執行 10 次以防無限循環
+    for iteration in range(10):
+        print(f"\n=== 迭代 {iteration + 1} ===")
+
+        # 調用 LLM
+        response = await llm_with_tools.ainvoke(messages)
+        messages.append(response)
+
+        # 顯示 LLM 回應
+        if response.content:
+            print(f"\n助手回應: {response.content}")
 
         # 檢查是否有工具調用
-        if hasattr(chunk, 'tool_calls') and chunk.tool_calls:
-            print(f"\n\n工具調用: {chunk.tool_calls}")
+        if not response.tool_calls:
+            print("\n對話完成（無需調用工具）")
+            break
+
+        # 執行工具調用
+        print(f"\n檢測到 {len(response.tool_calls)} 個工具調用")
+        for tool_call in response.tool_calls:
+            tool_name = tool_call['name']
+            tool_args = tool_call['args']
+
+            print(f"\n調用工具: {tool_name}")
+            print(f"參數: {tool_args}")
+
+            # 找到對應的工具並執行
+            if tool_name in tools_by_name:
+                tool = tools_by_name[tool_name]
+                tool_result = await tool.ainvoke(tool_args)
+            else:
+                tool_result = f"錯誤: 找不到工具 '{tool_name}'"
+
+            print(f"工具結果: {tool_result[:200]}..." if len(str(tool_result)) > 200 else f"工具結果: {tool_result}")
+
+            # 將工具結果加入訊息歷史
+            from langchain_core.messages import ToolMessage
+            messages.append(
+                ToolMessage(
+                    content=str(tool_result),
+                    tool_call_id=tool_call['id']
+                )
+            )
+    else:
+        print("\n達到最大迭代次數")
 
     print()  # 換行
 
