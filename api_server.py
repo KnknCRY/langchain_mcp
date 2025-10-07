@@ -4,9 +4,8 @@ from pydantic import BaseModel
 from langchain_ollama import ChatOllama
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_mcp_adapters.client import MultiServerMCPClient
+from contextlib import asynccontextmanager
 import json
-
-app = FastAPI()
 
 # 全局變量存儲 LLM 和工具
 llm_with_tools = None # 真正要用的 LLM物件
@@ -19,8 +18,8 @@ class ChatRequest(BaseModel):
     system_prompt: str = "你是一個有用的助手，可以使用 PostgreSQL 數據庫工具來回答問題。" # 系統提示(system prompt)
 
 
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     """初始化 LLM 和 MCP 客戶端"""
     global llm_with_tools, client, tools_by_name
 
@@ -55,6 +54,13 @@ async def startup_event():
 
     # 將 MCP 工具綁定到 LLM
     llm_with_tools = llm.bind_tools(tools)
+    
+    yield  # 應用運行期間
+    
+    # 清理資源
+    print("正在清理資源...")
+
+app = FastAPI(lifespan=lifespan)
 
 
 async def generate_stream(message: str, system_prompt: str):
