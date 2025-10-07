@@ -113,7 +113,7 @@ async def generate_stream(message: str, system_prompt: str):
         # 發送工具調用信息
         yield f"data: {json.dumps({'type': 'tool_calls_detected', 'count': len(response_tool_calls)}, ensure_ascii=False)}\n\n"
 
-        # 執行工具調用，這邊可以ctrl+F尋找”串流內容會長這樣“，可以看到tool_call具體物件內容長什麼樣子
+        # 執行工具調用，這邊可以ctrl+F尋找”chunck物件會長這樣“，可以看到tool_call具體物件內容長什麼樣子
         for tool_call in response_tool_calls:
             tool_name = tool_call['name']
             tool_args = tool_call['args']
