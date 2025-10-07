@@ -77,7 +77,15 @@ async def generate_stream(message: str, system_prompt: str):
         response_tool_calls = []
 
         async for chunk in llm_with_tools.astream(messages):
-            # 串流內容
+            # print("串流內容:", chunk, flush=True)
+            # 串流內容會長這樣
+            """
+                串流內容: content='这个' additional_kwargs={} response_metadata={} id='run--2b83d8e2-a1ef-4d63-9198-6acb34323e8a'
+                串流內容: content='查询' additional_kwargs={} response_metadata={} id='run--2b83d8e2-a1ef-4d63-9198-6acb34323e8a'
+                串流內容: content='。\n' additional_kwargs={} response_metadata={} id='run--2b83d8e2-a1ef-4d63-9198-6acb34323e8a'
+                串流內容: content='' additional_kwargs={} response_metadata={} id='run--2b83d8e2-a1ef-4d63-9198-6acb34323e8a' tool_calls=[{'name': 'execute_sql', 'args': {'sql': 'SELECT * FROM sales.customers'}, 'id': '7b1e1fad-1e85-4e74-afe3-269c1be2fa20', 'type': 'tool_call'}] tool_call_chunks=[{'name': 'execute_sql', 'args': '{"sql": "SELECT * FROM sales.customers"}', 'id': '7b1e1fad-1e85-4e74-afe3-269c1be2fa20', 'index': None, 'type': 'tool_call_chunk'}]
+                串流內容: content='' additional_kwargs={} response_metadata={'model': 'qwen2.5:latest', 'created_at': '2025-10-07T03:18:16.47494Z', 'done': True, 'done_reason': 'stop', 'total_duration': 4421769125, 'load_duration': 55672125, 'prompt_eval_count': 1177, 'prompt_eval_duration': 1559918875, 'eval_count': 55, 'eval_duration': 2802383875, 'model_name': 'qwen2.5:latest'} id='run--2b83d8e2-a1ef-4d63-9198-6acb34323e8a' usage_metadata={'input_tokens': 1177, 'output_tokens': 55, 'total_tokens': 1232}
+            """
             if chunk.content:
                 response_content += chunk.content
                 yield f"data: {json.dumps({'type': 'content', 'content': chunk.content}, ensure_ascii=False)}\n\n"
