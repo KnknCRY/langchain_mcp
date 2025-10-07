@@ -11,12 +11,12 @@ app = FastAPI()
 # 全局變量存儲 LLM 和工具
 llm_with_tools = None # 真正要用的 LLM物件
 client = None
-tools_by_name = None  # 工具名稱到工具物件的映射
+tools_by_name = None  # 工具名稱到工具物件的map，用來找到對應的工具function
 
 
 class ChatRequest(BaseModel):
     message: str
-    system_prompt: str = "你是一個有用的助手，可以使用 PostgreSQL 數據庫工具來回答問題。"
+    system_prompt: str = "你是一個有用的助手，可以使用 PostgreSQL 數據庫工具來回答問題。" # 系統提示(system prompt)
 
 
 @app.on_event("startup")
@@ -31,6 +31,8 @@ async def startup_event():
     )
 
     # 連接到 MCP 服務
+    # 用下面這句docker跑mcp server，記得要改DATABASE_URI
+    # docker run -p 8000:8000 -e DATABASE_URI=postgresql://postgres:50984878@localhost:5432/sales_db crystaldba/postgres-mcp --access-mode=unrestricted --transport=sse
     print("正在連接到 MCP 服務...")
     client = MultiServerMCPClient(
         connections={
@@ -48,7 +50,7 @@ async def startup_event():
     tools = await client.get_tools()
     print(f"已載入 {len(tools)} 個 MCP 工具")
 
-    # 建立工具名稱到工具物件的映射
+    # 建立工具名稱到工具物件的map，用來找到對應的工具function
     tools_by_name = {tool.name: tool for tool in tools}
 
     # 將 MCP 工具綁定到 LLM
@@ -65,8 +67,9 @@ async def generate_stream(message: str, system_prompt: str):
     ]
 
     # 工具調用循環，最多執行 10 次以防無限循環
+    # 每一次LLM回應都會判斷要不要調用工具，防止無限掉用工具的循環
     for iteration in range(10):
-        # 發送迭代信息
+        # 發送迭代信息(這個不是很重要，只是會用chunk回傳目前迭代的次數而已)
         yield f"data: {json.dumps({'type': 'iteration', 'iteration': iteration + 1}, ensure_ascii=False)}\n\n"
 
         # 調用 LLM (使用串流)
@@ -79,7 +82,7 @@ async def generate_stream(message: str, system_prompt: str):
                 response_content += chunk.content
                 yield f"data: {json.dumps({'type': 'content', 'content': chunk.content}, ensure_ascii=False)}\n\n"
 
-            # 收集工具調用
+            # 如果LLM回應有工具調用，也就是hasattr(chunk, 'tool_calls')為True，則把該工具調用的function存到陣列中
             if hasattr(chunk, 'tool_calls') and chunk.tool_calls:
                 response_tool_calls.extend(chunk.tool_calls)
 
@@ -88,7 +91,7 @@ async def generate_stream(message: str, system_prompt: str):
         response = AIMessage(content=response_content, tool_calls=response_tool_calls)
         messages.append(response)
 
-        # 檢查是否有工具調用
+        # 檢查是否有工具調用，當沒有工具要調用代表對話完成
         if not response_tool_calls:
             yield f"data: {json.dumps({'type': 'done', 'message': '對話完成'}, ensure_ascii=False)}\n\n"
             break
@@ -147,11 +150,12 @@ async def health():
     """健康檢查"""
     return {"status": "ok", "llm_ready": llm_with_tools is not None}
 
+# 執行方式
 # .venv/bin/python api_server.py
 # curl -X POST http://localhost:8080/chat/stream \
-    # -H "Content-Type: application/json" \
-    # -d '{"message": "撈出sales.customers資料表所有資料"}' \
-    # --no-buffer
+#     -H "Content-Type: application/json" \
+#     -d '{"message": "撈出sales.customers資料表所有資料"}' \
+#     --no-buffer
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8080)
