@@ -84,7 +84,7 @@ async def generate_stream(message: str, system_prompt: str):
 
         async for chunk in llm_with_tools.astream(messages):
             # print("串流內容:", chunk, flush=True)
-            # 串流內容會長這樣
+            # chunck物件會長這樣
             """
                 串流內容: content='这个' additional_kwargs={} response_metadata={} id='run--2b83d8e2-a1ef-4d63-9198-6acb34323e8a'
                 串流內容: content='查询' additional_kwargs={} response_metadata={} id='run--2b83d8e2-a1ef-4d63-9198-6acb34323e8a'
