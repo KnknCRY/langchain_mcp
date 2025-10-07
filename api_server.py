@@ -90,16 +90,16 @@ async def generate_stream(message: str, system_prompt: str):
                 response_content += chunk.content
                 yield f"data: {json.dumps({'type': 'content', 'content': chunk.content}, ensure_ascii=False)}\n\n"
 
-            # 如果LLM回應有工具調用，也就是hasattr(chunk, 'tool_calls')為True，則把該工具調用的function存到陣列中
+            # 如果LLM回應有工具調用，不會有content，而是要找有沒有tool_calls這個屬性，若有則把該工具調用的function存到陣列中
             if hasattr(chunk, 'tool_calls') and chunk.tool_calls:
                 response_tool_calls.extend(chunk.tool_calls)
 
-        # 構建完整的 response 物件加入訊息歷史
+        # 構建完整的 response 物件加入訊息歷史，每次迭代都會把這次的回應內容和工具調用加入訊息歷史，供下一次迭代讓LLM參考
         from langchain_core.messages import AIMessage
         response = AIMessage(content=response_content, tool_calls=response_tool_calls)
         messages.append(response)
 
-        # 檢查是否有工具調用，當沒有工具要調用代表對話完成
+        # 檢查是否有工具調用，當沒有工具要調用代表對話完成，直接break跳出迴圈，代表此次對話結束
         if not response_tool_calls:
             yield f"data: {json.dumps({'type': 'done', 'message': '對話完成'}, ensure_ascii=False)}\n\n"
             break
@@ -107,7 +107,7 @@ async def generate_stream(message: str, system_prompt: str):
         # 發送工具調用信息
         yield f"data: {json.dumps({'type': 'tool_calls_detected', 'count': len(response_tool_calls)}, ensure_ascii=False)}\n\n"
 
-        # 執行工具調用
+        # 執行工具調用，這邊可以ctrl+F尋找”串流內容會長這樣“，可以看到tool_call具體物件內容長什麼樣子
         for tool_call in response_tool_calls:
             tool_name = tool_call['name']
             tool_args = tool_call['args']
