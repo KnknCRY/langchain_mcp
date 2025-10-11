@@ -166,10 +166,10 @@ async def health():
 
 # 執行方式
 # .venv/bin/python api_server.py
-# curl -X POST http://localhost:8080/chat/stream \
+# curl -X POST http://localhost:9999/chat/stream \
 #     -H "Content-Type: application/json" \
 #     -d '{"message": "撈出sales.customers資料表所有資料"}' \
 #     --no-buffer
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    uvicorn.run(app, host="0.0.0.0", port=9999)
