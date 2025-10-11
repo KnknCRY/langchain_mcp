@@ -8,4 +8,4 @@ COPY requirements.txt .
 
 COPY . .
 
-CMD ["python", "api_server.py"]
+CMD ["python", "test.py"]
