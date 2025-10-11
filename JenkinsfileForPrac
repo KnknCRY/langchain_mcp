@@ -1,0 +1,78 @@
+pipeline {
+  agent any
+
+  tools {
+    node "my-node"
+  }
+
+  parameters {
+    string(name: 'ver', defaultValue: '1.0.0', description: 'The new version of the project')
+  }
+
+
+  environment {
+    NEW_VERSION = "1.0.0"
+    // SERVER_CREDENTIALS = credentials('github-credential')
+  }
+
+  stages {
+    stage("build") {
+        when {
+            expression {
+                BRANCH_NAME == 'dev' || CODE_CHANGES == true
+            }
+        }
+      steps {
+        echo '1'
+        echo "NEW_VERSION: ${NEW_VERSION}"
+      }
+    }
+
+    stage("test") {
+        when {
+            expression {
+                params.ver != null
+            }
+        }
+      steps {
+        echo '2'
+      }
+    }
+
+    stage("deploy") {
+        input {
+            message "Are you sure you want to deploy?"
+            ok "Yes"
+            parameters{
+                choice(name: 'deployOrNot', choices: ['Yes', 'No'], description: 'Are you sure you want to deploy?')
+                choice(name: 'deployOrNot2', choices: ['Yes', 'No'], description: 'Are you sure you want to deploy?')
+            }
+        }
+      steps {
+        echo '3'
+        withCredentials([
+            usernamePassword(credentialsId: 'github-credential', usernameVariable: 'GITHUB_USERNAME', passwordVariable: 'GITHUB_PASSWORD')
+        ]) {
+          echo "GITHUB_USERNAME: ${GITHUB_USERNAME}"
+          echo "GITHUB_PASSWORD: ${GITHUB_PASSWORD}"
+          echo "deployOrNot: ${deployOrNot}"
+          echo "deployOrNot2: ${deployOrNot2}"
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      echo '總是執行'
+    }
+
+    success {
+      echo '成功'
+    }
+
+    failure {
+      echo '失敗'
+    }
+  }
+}
