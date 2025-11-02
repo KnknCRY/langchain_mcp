@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP 數據庫查詢與視覺化</title>
+    <script src="https://code.highcharts.com/highcharts.js"></script>
+    <script src="https://code.highcharts.com/modules/exporting.js"></script>
+    <script src="https://code.highcharts.com/modules/export-data.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f5f5;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .chat-panel {
+            width: 40%;
+            display: flex;
+            flex-direction: column;
+            background: white;
+            border-right: 1px solid #e0e0e0;
+        }
+
+        .chart-panel {
+            width: 60%;
+            display: flex;
+            flex-direction: column;
+            background: white;
+            overflow: hidden;
+        }
+
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .message {
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+
+        .message.user {
+            align-self: flex-end;
+            background: #667eea;
+            color: white;
+        }
+
+        .message.assistant {
+            align-self: flex-start;
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .message.system {
+            align-self: center;
+            background: #fff3cd;
+            color: #856404;
+            font-size: 0.9rem;
+            padding: 0.5rem 1rem;
+        }
+
+        .input-area {
+            padding: 1rem;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .input-area input {
+            flex: 1;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+
+        .input-area input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .input-area button {
+            padding: 0.75rem 1.5rem;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+
+        .input-area button:hover:not(:disabled) {
+            background: #5568d3;
+        }
+
+        .input-area button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .chart-container {
+            flex: 1;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .chart-header h2 {
+            font-size: 1.25rem;
+            color: #333;
+        }
+
+        .chart-controls {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .chart-controls select {
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        #chartContainer {
+            flex: 1;
+            min-height: 400px;
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #999;
+        }
+
+        .empty-state svg {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .tool-call-info {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 0.5rem;
+            padding: 0.5rem;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 0.5rem;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .data-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .data-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+            }
+
+            .chat-panel,
+            .chart-panel {
+                width: 100%;
+            }
+
+            .chat-panel {
+                height: 50%;
+            }
+
+            .chart-panel {
+                height: 50%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🗄️ MCP 數據庫查詢與視覺化</h1>
+    </div>
+
+    <div class="container">
+        <!-- 聊天面板 -->
+        <div class="chat-panel">
+            <div class="messages" id="messages"></div>
+            <div class="input-area">
+                <input type="text" id="messageInput" placeholder="輸入您的問題..." 
+                       onkeypress="if(event.key === 'Enter') sendMessage()">
+                <button id="sendButton" onclick="sendMessage()">發送</button>
+            </div>
+        </div>
+
+        <!-- 圖表面板 -->
+        <div class="chart-panel">
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h2>數據視覺化</h2>
+                    <div class="chart-controls" id="chartControls" style="display: none;">
+                        <label>圖表類型：</label>
+                        <select id="chartTypeSelect" onchange="changeChartType()">
+                            <option value="column">柱狀圖</option>
+                            <option value="bar">條形圖</option>
+                            <option value="line">折線圖</option>
+                            <option value="pie">餅圖</option>
+                            <option value="table">表格</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="chartContainer">
+                    <div class="empty-state">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2"/>
+                            <line x1="9" y1="9" x2="15" y2="15"/>
+                            <line x1="15" y1="9" x2="9" y2="15"/>
+                        </svg>
+                        <p>查詢數據後，圖表將顯示在這裡</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentChart = null;
+        let currentChartData = null;
+        let currentChartType = 'column';
+        let eventSource = null;
+        let currentMessage = '';  // 當前累積的消息內容
+
+        // 發送消息
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (!message) return;
+
+            // 禁用輸入和按鈕
+            input.disabled = true;
+            document.getElementById('sendButton').disabled = true;
+
+            // 顯示用戶消息
+            addMessage('user', message);
+            input.value = '';
+
+            // 重置當前消息
+            currentMessage = '';
+
+            // 清空之前的圖表
+            clearChart();
+
+            // 連接 SSE
+            connectSSE(message);
+        }
+
+        // 連接 SSE 流
+        function connectSSE(message) {
+            // 關閉之前的連接
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            const apiUrl = 'http://localhost:9999/chat/stream';
+            
+            // 使用 fetch 發送 POST 請求並處理 SSE
+            fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    message: message,
+                    system_prompt: '你是一個有用的助手，可以使用 PostgreSQL 數據庫工具來回答問題。'
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('網絡錯誤');
+                }
+                return response.body.getReader();
+            })
+            .then(reader => {
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                function readStream() {
+                    reader.read().then(({ done, value }) => {
+                        if (done) {
+                            onStreamComplete();
+                            return;
+                        }
+
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop() || '';
+
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                const data = line.substring(6);
+                                if (data === '[DONE]') {
+                                    onStreamComplete();
+                                    return;
+                                }
+                                try {
+                                    const event = JSON.parse(data);
+                                    handleSSEEvent(event);
+                                } catch (e) {
+                                    console.error('解析事件失敗:', e, data);
+                                }
+                            }
+                        }
+
+                        readStream();
+                    }).catch(err => {
+                        console.error('讀取流失敗:', err);
+                        addMessage('system', '錯誤：連接中斷');
+                        onStreamComplete();
+                    });
+                }
+
+                readStream();
+            })
+            .catch(err => {
+                console.error('連接失敗:', err);
+                addMessage('system', '錯誤：無法連接到服務器。請確保 API 服務器正在運行。');
+                onStreamComplete();
+            });
+        }
+
+        // 處理 SSE 事件
+        function handleSSEEvent(event) {
+            switch (event.type) {
+                case 'content':
+                    currentMessage += event.content;
+                    updateLastMessage('assistant', currentMessage);
+                    break;
+
+                case 'tool_call_start':
+                    addMessage('system', `🔧 正在執行工具: ${event.name}`);
+                    break;
+
+                case 'tool_result':
+                    // 可以顯示工具結果預覽
+                    break;
+
+                case 'chart_data':
+                    console.log('📊 收到圖表數據:', event);
+                    handleChartData(event);
+                    break;
+
+                case 'done':
+                    // 對話完成，保持當前消息內容
+                    break;
+
+                case 'iteration':
+                case 'tool_calls_detected':
+                case 'max_iterations':
+                    // 這些事件可以忽略或顯示為系統消息
+                    break;
+            }
+        }
+
+        // 處理圖表數據
+        function handleChartData(event) {
+            console.log('📈 處理圖表數據:', event);
+            currentChartData = event;
+            currentChartType = event.recommended_chart_type || 'column';
+            
+            // 更新圖表類型選擇器
+            document.getElementById('chartTypeSelect').value = currentChartType;
+            document.getElementById('chartControls').style.display = 'flex';
+
+            // 渲染圖表
+            renderChart(currentChartType);
+        }
+
+        // 渲染圖表
+        function renderChart(chartType) {
+            console.log('🎨 渲染圖表，類型:', chartType, '數據:', currentChartData);
+            if (!currentChartData || !currentChartData.chart_data) {
+                console.error('❌ 缺少圖表數據');
+                return;
+            }
+
+            const container = document.getElementById('chartContainer');
+            container.innerHTML = ''; // 清空容器
+
+            if (chartType === 'table') {
+                renderTable();
+            } else {
+                renderHighchartsChart(chartType);
+            }
+        }
+
+        // 渲染 Highcharts 圖表
+        function renderHighchartsChart(chartType) {
+            const chartData = currentChartData.chart_data;
+            
+            if (!chartData.series || chartData.series.length === 0) {
+                document.getElementById('chartContainer').innerHTML = 
+                    '<div class="empty-state"><p>無法生成圖表：數據格式不正確</p></div>';
+                return;
+            }
+
+            const config = {
+                chart: {
+                    type: chartType,
+                    renderTo: 'chartContainer',
+                    height: null, // 自動高度
+                    backgroundColor: 'transparent'
+                },
+                title: {
+                    text: '查詢結果視覺化',
+                    style: {
+                        fontSize: '18px',
+                        fontWeight: '600'
+                    }
+                },
+                credits: {
+                    enabled: false
+                },
+                exporting: {
+                    enabled: true,
+                    buttons: {
+                        contextButton: {
+                            menuItems: ['downloadPNG', 'downloadJPEG', 'downloadPDF', 'downloadSVG']
+                        }
+                    }
+                }
+            };
+
+            // 根據圖表類型設置配置
+            if (chartType === 'pie') {
+                config.plotOptions = {
+                    pie: {
+                        allowPointSelect: true,
+                        cursor: 'pointer',
+                        dataLabels: {
+                            enabled: true,
+                            format: '<b>{point.name}</b>: {point.percentage:.1f} %'
+                        }
+                    }
+                };
+                config.series = chartData.series;
+            } else {
+                config.xAxis = {
+                    categories: chartData.categories || [],
+                    title: {
+                        text: '分類'
+                    }
+                };
+                config.yAxis = {
+                    title: {
+                        text: '數值'
+                    }
+                };
+                config.series = chartData.series.map(series => ({
+                    name: series.name,
+                    data: series.data
+                }));
+            }
+
+            // 創建圖表
+            currentChart = Highcharts.chart('chartContainer', config);
+        }
+
+        // 渲染表格
+        function renderTable() {
+            const container = document.getElementById('chartContainer');
+            const data = currentChartData;
+            
+            let html = '<table class="data-table">';
+            
+            // 表頭
+            html += '<thead><tr>';
+            data.columns.forEach(col => {
+                html += `<th>${escapeHtml(col)}</th>`;
+            });
+            html += '</tr></thead>';
+            
+            // 表體
+            html += '<tbody>';
+            data.rows.forEach(row => {
+                html += '<tr>';
+                row.forEach(cell => {
+                    html += `<td>${escapeHtml(String(cell))}</td>`;
+                });
+                html += '</tr>';
+            });
+            html += '</tbody>';
+            
+            html += '</table>';
+            html += `<p style="margin-top: 1rem; color: #666; font-size: 0.9rem;">共 ${data.row_count} 筆數據</p>`;
+            
+            container.innerHTML = html;
+        }
+
+        // 切換圖表類型
+        function changeChartType() {
+            const select = document.getElementById('chartTypeSelect');
+            currentChartType = select.value;
+            renderChart(currentChartType);
+        }
+
+        // 清空圖表
+        function clearChart() {
+            if (currentChart) {
+                currentChart.destroy();
+                currentChart = null;
+            }
+            currentChartData = null;
+            document.getElementById('chartControls').style.display = 'none';
+            document.getElementById('chartContainer').innerHTML = 
+                '<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg><p>查詢數據後，圖表將顯示在這裡</p></div>';
+        }
+
+        // 添加消息
+        function addMessage(type, content) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            messageDiv.textContent = content;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            return messageDiv;
+        }
+
+        // 更新最後一條消息
+        function updateLastMessage(type, content) {
+            const messagesDiv = document.getElementById('messages');
+            let lastMessage = messagesDiv.lastElementChild;
+            
+            if (!lastMessage || !lastMessage.classList.contains(type)) {
+                lastMessage = addMessage(type, '');
+            }
+            
+            lastMessage.textContent = content;
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // 流完成
+        function onStreamComplete() {
+            document.getElementById('messageInput').disabled = false;
+            document.getElementById('sendButton').disabled = false;
+            document.getElementById('messageInput').focus();
+        }
+
+        // HTML 轉義
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // 頁面加載完成後聚焦輸入框
+        window.addEventListener('load', () => {
+            document.getElementById('messageInput').focus();
+        });
+    </script>
+</body>
+</html>
